@@ -1,13 +1,11 @@
 package com.echoe.backend.service;
 
-import com.echoe.backend.config.GeminiProperties;
+import com.echoe.backend.config.DeepSeekProperties;
+import com.echoe.backend.dto.ai.DeepSeekRequest;
+import com.echoe.backend.dto.ai.DeepSeekRequest.Message;
+import com.echoe.backend.dto.ai.DeepSeekRequest.ResponseFormat;
+import com.echoe.backend.dto.ai.DeepSeekResponse;
 import com.echoe.backend.dto.ai.EchoResponse;
-import com.echoe.backend.dto.ai.GeminiRequest;
-import com.echoe.backend.dto.ai.GeminiRequest.Content;
-import com.echoe.backend.dto.ai.GeminiRequest.GenerationConfig;
-import com.echoe.backend.dto.ai.GeminiRequest.Part;
-import com.echoe.backend.dto.ai.GeminiRequest.SystemInstruction;
-import com.echoe.backend.dto.ai.GeminiResponse;
 import com.echoe.backend.dto.chat.ChatMessage;
 import com.echoe.backend.exception.AIServiceException;
 import tools.jackson.databind.ObjectMapper;
@@ -31,14 +29,14 @@ public class AIService {
     private static final Logger log = LoggerFactory.getLogger(AIService.class);
     private static final int MAX_HISTORY_MESSAGES = 10;
 
-    private final WebClient geminiWebClient;
-    private final GeminiProperties props;
+    private final WebClient deepSeekWebClient;
+    private final DeepSeekProperties props;
     private final ObjectMapper objectMapper;
 
     private String systemPrompt;
 
-    public AIService(WebClient geminiWebClient, GeminiProperties props, ObjectMapper objectMapper) {
-        this.geminiWebClient = geminiWebClient;
+    public AIService(WebClient deepSeekWebClient, DeepSeekProperties props, ObjectMapper objectMapper) {
+        this.deepSeekWebClient = deepSeekWebClient;
         this.props = props;
         this.objectMapper = objectMapper;
     }
@@ -51,42 +49,43 @@ public class AIService {
     }
 
     public EchoResponse chat(String userMessage, List<ChatMessage> history) {
-        GeminiRequest request = buildRequest(userMessage, history);
-
-        String uri = "/v1beta/models/" + props.model() + ":generateContent?key=" + props.apiKey();
+        DeepSeekRequest request = buildRequest(userMessage, history);
 
         try {
-            GeminiResponse response = geminiWebClient.post()
-                    .uri(uri)
+            DeepSeekResponse response = deepSeekWebClient.post()
+                    .uri("/chat/completions")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(request)
                     .retrieve()
-                    .bodyToMono(GeminiResponse.class)
+                    .bodyToMono(DeepSeekResponse.class)
                     .block();
 
             if (response == null) {
-                throw new AIServiceException("Empty response from Gemini API");
+                throw new AIServiceException("Empty response from DeepSeek API");
             }
 
             String text = response.extractText();
             if (text == null || text.isBlank()) {
-                throw new AIServiceException("No text in Gemini response");
+                throw new AIServiceException("No text in DeepSeek response");
             }
 
             return objectMapper.readValue(text, EchoResponse.class);
 
         } catch (WebClientResponseException ex) {
-            log.error("Gemini API error: {} {}", ex.getStatusCode(), ex.getResponseBodyAsString());
-            throw new AIServiceException("Gemini API returned " + ex.getStatusCode(), ex);
+            log.error("DeepSeek API error: {} {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            throw new AIServiceException("DeepSeek API returned " + ex.getStatusCode(), ex);
         } catch (AIServiceException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new AIServiceException("Failed to process Gemini response", ex);
+            throw new AIServiceException("Failed to process DeepSeek response", ex);
         }
     }
 
-    private GeminiRequest buildRequest(String userMessage, List<ChatMessage> history) {
-        List<Content> contents = new ArrayList<>();
+    private DeepSeekRequest buildRequest(String userMessage, List<ChatMessage> history) {
+        List<Message> messages = new ArrayList<>();
+
+        // System prompt as first message
+        messages.add(new Message("system", systemPrompt));
 
         // Add conversation history (last N messages)
         if (history != null) {
@@ -95,25 +94,21 @@ public class AIService {
                     : history;
 
             for (ChatMessage msg : trimmed) {
-                String role = "user".equals(msg.role()) ? "user" : "model";
-                contents.add(new Content(role, List.of(new Part(msg.content()))));
+                String role = "user".equals(msg.role()) ? "user" : "assistant";
+                messages.add(new Message(role, msg.content()));
             }
         }
 
         // Add current user message
-        contents.add(new Content("user", List.of(new Part(userMessage))));
+        messages.add(new Message("user", userMessage));
 
-        GenerationConfig genConfig = new GenerationConfig(
+        return new DeepSeekRequest(
+                props.model(),
+                messages,
                 props.temperature(),
                 props.topP(),
                 props.maxOutputTokens(),
-                "application/json"
-        );
-
-        return new GeminiRequest(
-                contents,
-                SystemInstruction.of(systemPrompt),
-                genConfig
+                ResponseFormat.json()
         );
     }
 }

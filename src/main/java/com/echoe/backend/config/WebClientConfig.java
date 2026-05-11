@@ -8,9 +8,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class WebClientConfig {
 
     @Bean
-    public WebClient geminiWebClient(GeminiProperties props) {
+    public WebClient deepSeekWebClient(DeepSeekProperties props) {
         return WebClient.builder()
                 .baseUrl(props.baseUrl())
+                .defaultHeader("Authorization", "Bearer " + props.apiKey())
                 .build();
     }
 }

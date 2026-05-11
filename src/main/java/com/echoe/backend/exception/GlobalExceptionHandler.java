@@ -22,6 +22,28 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(AuthException.class)
+    public ProblemDetail handleAuthException(AuthException ex) {
+        log.warn("Auth error: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Authentication Error");
+        return problem;
+    }
+
+    @ExceptionHandler(SessionException.class)
+    public ProblemDetail handleSessionException(SessionException ex) {
+        log.warn("Session error: {}", ex.getMessage());
+        HttpStatus status = ex.getMessage().contains("already ended")
+                ? HttpStatus.CONFLICT
+                : ex.getMessage().contains("not found")
+                    ? HttpStatus.NOT_FOUND
+                    : HttpStatus.BAD_REQUEST;
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
+        problem.setTitle("Session Error");
+        return problem;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidationException(MethodArgumentNotValidException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

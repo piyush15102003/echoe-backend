@@ -37,7 +37,7 @@ public class TestChatController {
         // 1. Check for crisis keywords in user message
         SafetyResult safetyResult = safetyService.check(request.message());
 
-        // 2. Call Gemini via AIService
+        // 2. Call DeepSeek via AIService
         EchoResponse echoResponse = aiService.chat(request.message(), request.history());
 
         // 3. Defense in depth — either layer triggers crisis resources
