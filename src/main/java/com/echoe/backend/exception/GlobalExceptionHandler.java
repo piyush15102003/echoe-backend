@@ -44,6 +44,15 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(RateLimitException.class)
+    public ProblemDetail handleRateLimitException(RateLimitException ex) {
+        log.warn("Rate limit: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        problem.setTitle("Rate Limit Exceeded");
+        return problem;
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidationException(MethodArgumentNotValidException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

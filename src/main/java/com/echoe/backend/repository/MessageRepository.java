@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface MessageRepository extends JpaRepository<MessageEntity, UUID> {
     List<MessageEntity> findBySessionIdOrderByCreatedAtAsc(UUID sessionId);
     List<MessageEntity> findTop10BySessionIdOrderByCreatedAtDesc(UUID sessionId);
+    long countBySessionIdAndRole(UUID sessionId, String role);
 }

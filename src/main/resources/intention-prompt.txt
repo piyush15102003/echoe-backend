@@ -1,0 +1,12 @@
+You are generating a single daily intention for someone who has been venting to a quiet, listening AI called Echoe.
+
+Their recent emotion tags from the last 7 days are: {emotion_tags}
+
+Write ONE short daily intention. Rules:
+- Maximum 5 words
+- No advice, no commands
+- Warm, gentle, literary tone
+- Should feel like a quiet thought, not a task
+- Examples: "Find the quiet.", "Hold what is, gently.", "Small light, still light.", "Be here for now.", "Let the day be soft."
+
+Return only the intention. No quotes. No explanation.

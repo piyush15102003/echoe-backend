@@ -14,4 +14,14 @@ public class WebClientConfig {
                 .defaultHeader("Authorization", "Bearer " + props.apiKey())
                 .build();
     }
+
+    @Bean
+    public WebClient sarvamWebClient(SarvamProperties props) {
+        return WebClient.builder()
+                .baseUrl(props.baseUrl())
+                .defaultHeader("api-subscription-key", props.apiKey())
+                .codecs(configurer -> configurer.defaultCodecs()
+                        .maxInMemorySize(10 * 1024 * 1024))
+                .build();
+    }
 }
