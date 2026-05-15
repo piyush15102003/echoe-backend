@@ -1,10 +1,6 @@
 package com.echoe.backend.service;
 
 import com.echoe.backend.config.DeepSeekProperties;
-import com.echoe.backend.dto.ai.DeepSeekRequest;
-import com.echoe.backend.dto.ai.DeepSeekRequest.Message;
-import com.echoe.backend.dto.ai.DeepSeekRequest.ResponseFormat;
-import com.echoe.backend.dto.ai.DeepSeekResponse;
 import com.echoe.backend.dto.ai.EchoResponse;
 import com.echoe.backend.dto.ai.SummaryResponse;
 import com.echoe.backend.dto.chat.ChatMessage;
@@ -22,7 +18,9 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AIService {
@@ -54,74 +52,88 @@ public class AIService {
         log.info("Summary prompt loaded ({} chars)", summaryPrompt.length());
     }
 
+    private static final int MAX_RETRIES = 2;
+
     public EchoResponse chat(String userMessage, List<ChatMessage> history) {
-        DeepSeekRequest request = buildRequest(userMessage, history);
+        Map<String, Object> request = buildRequest(userMessage, history, props.temperature());
 
-        try {
-            DeepSeekResponse response = deepSeekWebClient.post()
-                    .uri("/chat/completions")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(request)
-                    .retrieve()
-                    .bodyToMono(DeepSeekResponse.class)
-                    .block();
+        for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = deepSeekWebClient.post()
+                        .uri("/chat/completions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(request)
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .block();
 
-            if (response == null) {
-                throw new AIServiceException("Empty response from DeepSeek API");
+                String text = extractText(response);
+                log.debug("DeepSeek extracted text (attempt {}): {}", attempt + 1, text);
+
+                if (text == null || text.isBlank()) {
+                    if (attempt < MAX_RETRIES) {
+                        log.warn("DeepSeek returned blank text (attempt {}), retrying...", attempt + 1);
+                        continue;
+                    }
+                    log.error("DeepSeek returned empty text after {} attempts. Full response: {}",
+                            MAX_RETRIES + 1, response);
+                    return fallbackResponse();
+                }
+
+                return objectMapper.readValue(text, EchoResponse.class);
+
+            } catch (WebClientResponseException ex) {
+                log.error("DeepSeek API error: {} {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+                throw new AIServiceException("DeepSeek API returned " + ex.getStatusCode(), ex);
+            } catch (AIServiceException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                log.error("Failed to process DeepSeek response", ex);
+                throw new AIServiceException("Failed to process DeepSeek response", ex);
             }
-
-            String text = response.extractText();
-            if (text == null || text.isBlank()) {
-                throw new AIServiceException("No text in DeepSeek response");
-            }
-
-            return objectMapper.readValue(text, EchoResponse.class);
-
-        } catch (WebClientResponseException ex) {
-            log.error("DeepSeek API error: {} {}", ex.getStatusCode(), ex.getResponseBodyAsString());
-            throw new AIServiceException("DeepSeek API returned " + ex.getStatusCode(), ex);
-        } catch (AIServiceException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new AIServiceException("Failed to process DeepSeek response", ex);
         }
+        return fallbackResponse();
+    }
+
+    private EchoResponse fallbackResponse() {
+        return new EchoResponse(
+                "I'm here with you. Take your time.",
+                "Can you tell me a little more about what you're feeling?",
+                "other", 0.3, "warm_curious", false, false
+        );
     }
 
     public SummaryResponse generateSummary(List<ChatMessage> conversation) {
-        List<Message> messages = new ArrayList<>();
-        messages.add(new Message("system", summaryPrompt));
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", summaryPrompt));
 
-        // Build the full conversation as a single user message
         StringBuilder conversationText = new StringBuilder();
         for (ChatMessage msg : conversation) {
             String label = "user".equals(msg.role()) ? "User" : "Echoe";
             conversationText.append(label).append(": ").append(msg.content()).append("\n\n");
         }
-        messages.add(new Message("user", conversationText.toString()));
+        messages.add(Map.of("role", "user", "content", conversationText.toString()));
 
-        DeepSeekRequest request = new DeepSeekRequest(
-                props.model(),
-                messages,
-                0.5,
-                props.topP(),
-                props.maxOutputTokens(),
-                ResponseFormat.json()
-        );
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("model", props.model());
+        request.put("messages", messages);
+        request.put("temperature", 0.5);
+        request.put("top_p", props.topP());
+        request.put("max_tokens", props.maxOutputTokens());
+        request.put("response_format", Map.of("type", "json_object"));
 
         try {
-            DeepSeekResponse response = deepSeekWebClient.post()
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = deepSeekWebClient.post()
                     .uri("/chat/completions")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(request)
                     .retrieve()
-                    .bodyToMono(DeepSeekResponse.class)
+                    .bodyToMono(Map.class)
                     .block();
 
-            if (response == null) {
-                throw new AIServiceException("Empty summary response from DeepSeek API");
-            }
-
-            String text = response.extractText();
+            String text = extractText(response);
             if (text == null || text.isBlank()) {
                 throw new AIServiceException("No text in DeepSeek summary response");
             }
@@ -138,13 +150,12 @@ public class AIService {
         }
     }
 
-    private DeepSeekRequest buildRequest(String userMessage, List<ChatMessage> history) {
-        List<Message> messages = new ArrayList<>();
+    private Map<String, Object> buildRequest(String userMessage, List<ChatMessage> history,
+                                              double temperature) {
+        List<Map<String, String>> messages = new ArrayList<>();
 
-        // System prompt as first message
-        messages.add(new Message("system", systemPrompt));
+        messages.add(Map.of("role", "system", "content", systemPrompt));
 
-        // Add conversation history (last N messages)
         if (history != null) {
             List<ChatMessage> trimmed = history.size() > MAX_HISTORY_MESSAGES
                     ? history.subList(history.size() - MAX_HISTORY_MESSAGES, history.size())
@@ -152,20 +163,36 @@ public class AIService {
 
             for (ChatMessage msg : trimmed) {
                 String role = "user".equals(msg.role()) ? "user" : "assistant";
-                messages.add(new Message(role, msg.content()));
+                messages.add(Map.of("role", role, "content", msg.content()));
             }
         }
 
-        // Add current user message
-        messages.add(new Message("user", userMessage));
+        messages.add(Map.of("role", "user", "content", userMessage));
 
-        return new DeepSeekRequest(
-                props.model(),
-                messages,
-                props.temperature(),
-                props.topP(),
-                props.maxOutputTokens(),
-                ResponseFormat.json()
-        );
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("model", props.model());
+        request.put("messages", messages);
+        request.put("temperature", temperature);
+        request.put("top_p", props.topP());
+        request.put("max_tokens", props.maxOutputTokens());
+        request.put("response_format", Map.of("type", "json_object"));
+
+        return request;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractText(Map<String, Object> response) {
+        if (response == null) {
+            return null;
+        }
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
+        if (choices == null || choices.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> message = (Map<String, Object>) choices.getFirst().get("message");
+        if (message == null) {
+            return null;
+        }
+        return (String) message.get("content");
     }
 }

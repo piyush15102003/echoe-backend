@@ -32,27 +32,24 @@ public class VaultController {
         return vaultService.updateSettings(userId, request);
     }
 
-    @PostMapping("/sessions")
+    @GetMapping("/sessions")
     public List<VaultSessionSummary> listSessions(
-            @AuthenticationPrincipal UUID userId,
-            @Valid @RequestBody VaultAccessRequest request) {
-        return vaultService.listSessions(userId, request.pin());
+            @AuthenticationPrincipal UUID userId) {
+        return vaultService.listSessions(userId);
     }
 
-    @PostMapping("/sessions/{sessionId}")
+    @GetMapping("/sessions/{sessionId}")
     public VaultSessionDetail getSessionDetail(
             @AuthenticationPrincipal UUID userId,
-            @PathVariable UUID sessionId,
-            @Valid @RequestBody VaultAccessRequest request) {
-        return vaultService.getSessionDetail(userId, sessionId, request.pin());
+            @PathVariable UUID sessionId) {
+        return vaultService.getSessionDetail(userId, sessionId);
     }
 
-    @PostMapping("/sessions/{sessionId}/delete")
+    @DeleteMapping("/sessions/{sessionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteSession(
             @AuthenticationPrincipal UUID userId,
-            @PathVariable UUID sessionId,
-            @Valid @RequestBody VaultAccessRequest request) {
-        vaultService.deleteSession(userId, sessionId, request.pin());
+            @PathVariable UUID sessionId) {
+        vaultService.deleteSession(userId, sessionId);
     }
 }

@@ -24,6 +24,9 @@ public class SessionEntity {
     @Column(name = "ended_at")
     private Instant endedAt;
 
+    @Column(name = "paused_at")
+    private Instant pausedAt;
+
     @Column(name = "input_mode")
     private String inputMode;
 
@@ -74,6 +77,9 @@ public class SessionEntity {
 
     public Instant getEndedAt() { return endedAt; }
     public void setEndedAt(Instant endedAt) { this.endedAt = endedAt; }
+
+    public Instant getPausedAt() { return pausedAt; }
+    public void setPausedAt(Instant pausedAt) { this.pausedAt = pausedAt; }
 
     public String getInputMode() { return inputMode; }
 

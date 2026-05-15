@@ -31,9 +31,38 @@ public class VoiceService {
     }
 
     /**
+     * Normalize language codes for Sarvam API (e.g. "en" → "en-IN").
+     */
+    private String normalizeLangCode(String language) {
+        if (language == null || language.isBlank()) {
+            return "en-IN";
+        }
+        // Already a full Sarvam code like "hi-IN", "en-IN"
+        if (language.contains("-")) {
+            return language;
+        }
+        // Map short codes to Sarvam codes
+        return switch (language.toLowerCase()) {
+            case "en" -> "en-IN";
+            case "hi" -> "hi-IN";
+            case "bn" -> "bn-IN";
+            case "kn" -> "kn-IN";
+            case "ml" -> "ml-IN";
+            case "mr" -> "mr-IN";
+            case "ta" -> "ta-IN";
+            case "te" -> "te-IN";
+            case "gu" -> "gu-IN";
+            case "pa" -> "pa-IN";
+            case "ur" -> "ur-IN";
+            default -> "en-IN";
+        };
+    }
+
+    /**
      * Transcribe audio bytes to text using Sarvam STT API.
      */
     public String transcribe(byte[] audio, String language) {
+        String sarvamLang = normalizeLangCode(language);
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("file", new ByteArrayResource(audio) {
             @Override
@@ -42,7 +71,8 @@ public class VoiceService {
             }
         }).contentType(MediaType.APPLICATION_OCTET_STREAM);
         builder.part("model", props.sttModel());
-        builder.part("language_code", language);
+        builder.part("mode", "transcribe");
+        builder.part("language_code", sarvamLang);
 
         try {
             @SuppressWarnings("unchecked")
@@ -77,15 +107,14 @@ public class VoiceService {
      * Returns raw MP3 audio bytes.
      */
     public byte[] synthesize(String text, ToneConfig config, String language) {
+        String sarvamLang = normalizeLangCode(language);
         Map<String, Object> body = Map.of(
-                "inputs", List.of(text),
-                "target_language_code", language,
+                "text", text,
+                "target_language_code", sarvamLang,
                 "model", props.ttsModel(),
                 "speaker", config.speaker(),
                 "pace", config.pace(),
-                "loudness", 1.0,
-                "speech_sample_rate", 22050,
-                "enable_preprocessing", true
+                "speech_sample_rate", 22050
         );
 
         try {

@@ -2,9 +2,7 @@ package com.echoe.backend.controller;
 
 import com.echoe.backend.dto.message.SendTextRequest;
 import com.echoe.backend.dto.message.SendTextResponse;
-import com.echoe.backend.dto.session.CreateSessionRequest;
-import com.echoe.backend.dto.session.CreateSessionResponse;
-import com.echoe.backend.dto.session.EndSessionResponse;
+import com.echoe.backend.dto.session.*;
 import com.echoe.backend.dto.voice.SendVoiceResponse;
 import com.echoe.backend.service.MessageService;
 import com.echoe.backend.service.SessionService;
@@ -14,6 +12,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import org.springframework.http.ResponseEntity;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -65,5 +65,29 @@ public class SessionController {
             @AuthenticationPrincipal UUID userId,
             @PathVariable UUID sessionId) {
         return sessionService.endSession(userId, sessionId);
+    }
+
+    @PostMapping("/{sessionId}/pause")
+    public PauseSessionResponse pauseSession(
+            @AuthenticationPrincipal UUID userId,
+            @PathVariable UUID sessionId) {
+        return sessionService.pauseSession(userId, sessionId);
+    }
+
+    @PostMapping("/{sessionId}/resume")
+    public ResumeSessionResponse resumeSession(
+            @AuthenticationPrincipal UUID userId,
+            @PathVariable UUID sessionId) {
+        return sessionService.resumeSession(userId, sessionId);
+    }
+
+    @GetMapping("/active")
+    public ResponseEntity<ActiveSessionResponse> getActiveSession(
+            @AuthenticationPrincipal UUID userId) {
+        ActiveSessionResponse active = sessionService.getActiveOrPausedSession(userId);
+        if (active == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(active);
     }
 }

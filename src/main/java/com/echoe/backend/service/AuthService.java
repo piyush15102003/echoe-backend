@@ -1,9 +1,6 @@
 package com.echoe.backend.service;
 
-import com.echoe.backend.dto.auth.AnonymousAuthRequest;
-import com.echoe.backend.dto.auth.AuthResponse;
-import com.echoe.backend.dto.auth.RefreshRequest;
-import com.echoe.backend.dto.auth.TokenResponse;
+import com.echoe.backend.dto.auth.*;
 import com.echoe.backend.entity.RefreshTokenEntity;
 import com.echoe.backend.entity.UserEntity;
 import com.echoe.backend.exception.AuthException;
@@ -13,6 +10,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,16 +26,22 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
+    private static final int MAX_PIN_ATTEMPTS = 5;
+    private static final long LOCKOUT_MINUTES = 5;
+
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtService jwtService;
+    private final PasswordEncoder passwordEncoder;
 
     public AuthService(UserRepository userRepository,
                        RefreshTokenRepository refreshTokenRepository,
-                       JwtService jwtService) {
+                       JwtService jwtService,
+                       PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.jwtService = jwtService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
@@ -96,6 +100,82 @@ public class AuthService {
                 .orElseThrow(() -> new AuthException("User not found"));
 
         return issueTokenPairInFamily(user, storedToken.getFamilyId());
+    }
+
+    @Transactional
+    public SuccessResponse setPin(UUID userId, PinRequest request) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("User not found"));
+
+        user.setPinHash(passwordEncoder.encode(request.pin()));
+        user.setFailedPinAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+
+        log.info("PIN set for user {}", userId);
+        return new SuccessResponse(true);
+    }
+
+    @Transactional
+    public PinVerifyResponse verifyPin(UUID userId, PinRequest request) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("User not found"));
+
+        if (user.getPinHash() == null) {
+            return new PinVerifyResponse(false, null, null);
+        }
+
+        // Check lockout
+        if (user.getLockedUntil() != null && Instant.now().isBefore(user.getLockedUntil())) {
+            return new PinVerifyResponse(false, 0, user.getLockedUntil().toString());
+        }
+
+        // Clear expired lockout
+        if (user.getLockedUntil() != null) {
+            user.setLockedUntil(null);
+            user.setFailedPinAttempts(0);
+        }
+
+        if (passwordEncoder.matches(request.pin(), user.getPinHash())) {
+            user.setFailedPinAttempts(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
+            return new PinVerifyResponse(true, null, null);
+        }
+
+        // Wrong PIN
+        int attempts = user.getFailedPinAttempts() + 1;
+        user.setFailedPinAttempts(attempts);
+
+        if (attempts >= MAX_PIN_ATTEMPTS) {
+            Instant lockedUntil = Instant.now().plusSeconds(LOCKOUT_MINUTES * 60);
+            user.setLockedUntil(lockedUntil);
+            userRepository.save(user);
+            log.warn("PIN lockout triggered for user {}", userId);
+            return new PinVerifyResponse(false, 0, lockedUntil.toString());
+        }
+
+        userRepository.save(user);
+        return new PinVerifyResponse(false, MAX_PIN_ATTEMPTS - attempts, null);
+    }
+
+    @Transactional
+    public SuccessResponse wipeAccount(UUID userId, PinRequest request) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("User not found"));
+
+        if (user.getPinHash() == null || !passwordEncoder.matches(request.pin(), user.getPinHash())) {
+            throw new AuthException("Invalid PIN");
+        }
+
+        // Revoke all tokens
+        refreshTokenRepository.revokeAllByUserId(userId);
+
+        // Delete the user (cascade will handle sessions, messages, etc.)
+        userRepository.delete(user);
+
+        log.info("Account wiped for user {}", userId);
+        return new SuccessResponse(true);
     }
 
     private AuthResponse issueTokenPair(UserEntity user) {

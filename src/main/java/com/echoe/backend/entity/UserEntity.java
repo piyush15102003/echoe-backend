@@ -36,6 +36,12 @@ public class UserEntity {
     @Column(name = "subscription_tier")
     private String subscriptionTier;
 
+    @Column(name = "failed_pin_attempts")
+    private Integer failedPinAttempts;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
     @Column(name = "sessions_this_week")
     private int sessionsThisWeek;
 
@@ -83,6 +89,12 @@ public class UserEntity {
 
     public String getSubscriptionTier() { return subscriptionTier; }
     public void setSubscriptionTier(String subscriptionTier) { this.subscriptionTier = subscriptionTier; }
+
+    public int getFailedPinAttempts() { return failedPinAttempts != null ? failedPinAttempts : 0; }
+    public void setFailedPinAttempts(int failedPinAttempts) { this.failedPinAttempts = failedPinAttempts; }
+
+    public Instant getLockedUntil() { return lockedUntil; }
+    public void setLockedUntil(Instant lockedUntil) { this.lockedUntil = lockedUntil; }
 
     public int getSessionsThisWeek() { return sessionsThisWeek; }
     public void setSessionsThisWeek(int sessionsThisWeek) { this.sessionsThisWeek = sessionsThisWeek; }

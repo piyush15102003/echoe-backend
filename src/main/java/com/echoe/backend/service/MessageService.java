@@ -22,7 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -37,6 +39,7 @@ public class MessageService {
     private final VoiceService voiceService;
     private final ToneEngine toneEngine;
     private final RateLimitProperties rateLimitProperties;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
 
     public MessageService(MessageRepository messageRepository,
                           SessionRepository sessionRepository,
@@ -46,7 +49,8 @@ public class MessageService {
                           CrisisResourceProvider crisisResourceProvider,
                           VoiceService voiceService,
                           ToneEngine toneEngine,
-                          RateLimitProperties rateLimitProperties) {
+                          RateLimitProperties rateLimitProperties,
+                          tools.jackson.databind.ObjectMapper objectMapper) {
         this.messageRepository = messageRepository;
         this.sessionRepository = sessionRepository;
         this.userRepository = userRepository;
@@ -56,6 +60,7 @@ public class MessageService {
         this.voiceService = voiceService;
         this.toneEngine = toneEngine;
         this.rateLimitProperties = rateLimitProperties;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -65,17 +70,7 @@ public class MessageService {
         enforceMessageLimit(sessionId);
 
         // 1. Build conversation history from DB BEFORE saving new message
-        List<MessageEntity> recentMessages =
-                messageRepository.findTop10BySessionIdOrderByCreatedAtDesc(sessionId);
-        List<MessageEntity> chronological = new ArrayList<>(recentMessages);
-        Collections.reverse(chronological);
-
-        List<ChatMessage> history = chronological.stream()
-                .map(m -> new ChatMessage(
-                        "echo".equals(m.getRole()) ? "echo" : "user",
-                        m.getContent()
-                ))
-                .toList();
+        List<ChatMessage> history = buildHistory(sessionId);
 
         // 2. Save user message
         MessageEntity userMessage = new MessageEntity(sessionId, "user", request.content());
@@ -133,17 +128,7 @@ public class MessageService {
         String transcribedText = voiceService.transcribe(audio, language);
 
         // 2. Build conversation history from DB BEFORE saving new message
-        List<MessageEntity> recentMessages =
-                messageRepository.findTop10BySessionIdOrderByCreatedAtDesc(sessionId);
-        List<MessageEntity> chronological = new ArrayList<>(recentMessages);
-        Collections.reverse(chronological);
-
-        List<ChatMessage> history = chronological.stream()
-                .map(m -> new ChatMessage(
-                        "echo".equals(m.getRole()) ? "echo" : "user",
-                        m.getContent()
-                ))
-                .toList();
+        List<ChatMessage> history = buildHistory(sessionId);
 
         // 3. Save user message
         MessageEntity userMessage = new MessageEntity(sessionId, "user", transcribedText);
@@ -200,6 +185,49 @@ public class MessageService {
                 resources,
                 !echoResponse.sessionShouldEnd()
         );
+    }
+
+    private List<ChatMessage> buildHistory(UUID sessionId) {
+        List<MessageEntity> recentMessages =
+                messageRepository.findTop10BySessionIdOrderByCreatedAtDesc(sessionId);
+        List<MessageEntity> chronological = new ArrayList<>(recentMessages);
+        Collections.reverse(chronological);
+
+        return chronological.stream()
+                .map(m -> {
+                    if ("echo".equals(m.getRole())) {
+                        // Reconstruct JSON so DeepSeek sees consistent format in history
+                        return new ChatMessage("echo", toEchoJson(m));
+                    }
+                    return new ChatMessage("user", m.getContent());
+                })
+                .toList();
+    }
+
+    private String toEchoJson(MessageEntity m) {
+        String content = m.getContent();
+        String reflection = content;
+        String question = "";
+        int split = content.indexOf("\n\n");
+        if (split >= 0) {
+            reflection = content.substring(0, split);
+            question = content.substring(split + 2);
+        }
+
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("reflection", reflection);
+        json.put("question", question);
+        json.put("detected_emotion", m.getDetectedEmotion() != null ? m.getDetectedEmotion() : "other");
+        json.put("intensity", m.getEmotionIntensity() != null ? m.getEmotionIntensity() : 0.3);
+        json.put("suggested_tone", m.getToneUsed() != null ? m.getToneUsed() : "warm_curious");
+        json.put("crisis_flag", false);
+        json.put("session_should_end", false);
+
+        try {
+            return objectMapper.writeValueAsString(json);
+        } catch (Exception e) {
+            return content; // fallback to plain text if serialization fails
+        }
     }
 
     private void enforceMessageLimit(UUID sessionId) {

@@ -12,11 +12,7 @@ import com.echoe.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,27 +42,14 @@ public class VaultService {
     @Transactional
     public VaultSettingsResponse updateSettings(UUID userId, VaultSettingsRequest request) {
         UserEntity user = findUser(userId);
-
-        if (request.enable()) {
-            if (request.confirmPin() == null || !request.pin().equals(request.confirmPin())) {
-                throw new AuthException("PIN and confirmation do not match");
-            }
-            user.setPinHash(hashPin(request.pin()));
-            user.setVaultModeEnabled(true);
-        } else {
-            // Verify current PIN before disabling
-            verifyPin(user, request.pin());
-            user.setVaultModeEnabled(false);
-        }
-
+        user.setVaultModeEnabled(request.enable());
         userRepository.save(user);
         return new VaultSettingsResponse(user.isVaultModeEnabled(), user.getPinHash() != null);
     }
 
-    public List<VaultSessionSummary> listSessions(UUID userId, String pin) {
+    public List<VaultSessionSummary> listSessions(UUID userId) {
         UserEntity user = findUser(userId);
         verifyVaultEnabled(user);
-        verifyPin(user, pin);
 
         return sessionRepository
                 .findByUserIdAndEndedAtIsNotNullAndDeletedAtIsNullOrderByEndedAtDesc(userId)
@@ -83,10 +66,9 @@ public class VaultService {
                 .toList();
     }
 
-    public VaultSessionDetail getSessionDetail(UUID userId, UUID sessionId, String pin) {
+    public VaultSessionDetail getSessionDetail(UUID userId, UUID sessionId) {
         UserEntity user = findUser(userId);
         verifyVaultEnabled(user);
-        verifyPin(user, pin);
 
         SessionEntity session = sessionRepository.findByIdAndUserIdAndDeletedAtIsNull(sessionId, userId)
                 .orElseThrow(() -> new SessionException("Session not found"));
@@ -121,10 +103,9 @@ public class VaultService {
     }
 
     @Transactional
-    public void deleteSession(UUID userId, UUID sessionId, String pin) {
+    public void deleteSession(UUID userId, UUID sessionId) {
         UserEntity user = findUser(userId);
         verifyVaultEnabled(user);
-        verifyPin(user, pin);
 
         SessionEntity session = sessionRepository.findByIdAndUserIdAndDeletedAtIsNull(sessionId, userId)
                 .orElseThrow(() -> new SessionException("Session not found"));
@@ -141,25 +122,6 @@ public class VaultService {
     private void verifyVaultEnabled(UserEntity user) {
         if (!user.isVaultModeEnabled()) {
             throw new AuthException("Vault mode is not enabled");
-        }
-    }
-
-    private void verifyPin(UserEntity user, String pin) {
-        if (user.getPinHash() == null) {
-            throw new AuthException("No PIN set");
-        }
-        if (!user.getPinHash().equals(hashPin(pin))) {
-            throw new AuthException("Invalid PIN");
-        }
-    }
-
-    private String hashPin(String pin) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(pin.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 not available", e);
         }
     }
 }

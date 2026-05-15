@@ -2,6 +2,7 @@ package com.echoe.backend.config;
 
 import com.echoe.backend.security.JwtAuthenticationFilter;
 import com.echoe.backend.security.RateLimitingFilter;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -36,6 +37,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/anonymous").permitAll()
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
                         .anyRequest().authenticated())
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) ->
+                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized")))
                 .addFilterBefore(rateLimitingFilter,
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter,

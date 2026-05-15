@@ -2,6 +2,9 @@ spring:
   application:
     name: echoe-backend
 
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -14,7 +17,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     open-in-view: false
     properties:
       hibernate:
@@ -29,6 +32,10 @@ spring:
 
 server:
   port: 8080
+
+logging:
+  level:
+    com.echoe.backend: DEBUG
 
 # --- App-specific config ---
 
@@ -55,5 +62,5 @@ echoe:
 
   jwt:
     secret: ${JWT_SECRET}
-    access-expiration-ms: ${JWT_EXPIRATION_MS:3600000}
-    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:7776000000}
+    access-expiration-ms: ${JWT_EXPIRATION_MS:2592000000}      # 30 days (dev-friendly)
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:31536000000}  # 365 days

@@ -2,9 +2,7 @@ package com.echoe.backend.service;
 
 import com.echoe.backend.dto.ai.SummaryResponse;
 import com.echoe.backend.dto.chat.ChatMessage;
-import com.echoe.backend.dto.session.CreateSessionRequest;
-import com.echoe.backend.dto.session.CreateSessionResponse;
-import com.echoe.backend.dto.session.EndSessionResponse;
+import com.echoe.backend.dto.session.*;
 import com.echoe.backend.entity.MessageEntity;
 import com.echoe.backend.entity.SessionEntity;
 import com.echoe.backend.entity.UserEntity;
@@ -151,6 +149,58 @@ public class SessionService {
             throw new SessionException("Session already ended");
         }
 
+        // Un-pause if resuming a paused session via message send
+        if (session.getPausedAt() != null) {
+            session.setPausedAt(null);
+            sessionRepository.save(session);
+        }
+
         return session;
+    }
+
+    @Transactional
+    public PauseSessionResponse pauseSession(UUID userId, UUID sessionId) {
+        SessionEntity session = sessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new SessionException("Session not found"));
+
+        if (session.getEndedAt() != null) {
+            throw new SessionException("Session already ended");
+        }
+
+        session.setPausedAt(Instant.now());
+        sessionRepository.save(session);
+
+        return new PauseSessionResponse(session.getId(), session.getPausedAt());
+    }
+
+    @Transactional
+    public ResumeSessionResponse resumeSession(UUID userId, UUID sessionId) {
+        SessionEntity session = sessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new SessionException("Session not found"));
+
+        if (session.getEndedAt() != null) {
+            throw new SessionException("Session already ended");
+        }
+
+        session.setPausedAt(null);
+        sessionRepository.save(session);
+
+        List<MessageEntity> allMessages =
+                messageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+
+        List<ResumeSessionResponse.MessageItem> messages = allMessages.stream()
+                .map(m -> new ResumeSessionResponse.MessageItem(
+                        m.getRole(), m.getContent(), m.getCreatedAt()))
+                .toList();
+
+        return new ResumeSessionResponse(session.getId(), session.getInputMode(), messages);
+    }
+
+    public ActiveSessionResponse getActiveOrPausedSession(UUID userId) {
+        return sessionRepository.findByUserIdAndEndedAtIsNull(userId)
+                .map(s -> new ActiveSessionResponse(
+                        s.getId(), s.getInputMode(), s.getStartedAt(),
+                        s.getPausedAt() != null))
+                .orElse(null);
     }
 }
