@@ -1,6 +1,7 @@
 package com.echoe.backend.controller;
 
 import com.echoe.backend.dto.auth.*;
+import com.echoe.backend.dto.safety.EmergencyContact;
 import com.echoe.backend.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -49,5 +50,27 @@ public class AuthController {
             @AuthenticationPrincipal UUID userId,
             @Valid @RequestBody PinRequest request) {
         return authService.wipeAccount(userId, request);
+    }
+
+    @PutMapping("/emergency-contact")
+    public EmergencyContact saveEmergencyContact(
+            @AuthenticationPrincipal UUID userId,
+            @Valid @RequestBody EmergencyContactRequest request) {
+        return authService.saveEmergencyContact(userId, request);
+    }
+
+    @DeleteMapping("/emergency-contact")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteEmergencyContact(@AuthenticationPrincipal UUID userId) {
+        authService.deleteEmergencyContact(userId);
+    }
+
+    /**
+     * Force-wipe without PIN — used when the user forgot their PIN and has no biometric.
+     * Requires a valid JWT (proves device ownership). No PIN verification.
+     */
+    @DeleteMapping("/wipe/force")
+    public SuccessResponse forceWipeAccount(@AuthenticationPrincipal UUID userId) {
+        return authService.forceWipeAccount(userId);
     }
 }

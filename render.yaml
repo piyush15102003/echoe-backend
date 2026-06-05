@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: echoe-backend
+    runtime: docker
+    plan: starter
+    region: oregon
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: SERVER_PORT
+        value: '8080'
+
+      # Supabase Postgres
+      - key: SPRING_DATASOURCE_URL
+        sync: false          # paste: jdbc:postgresql://db.xxx.supabase.co:5432/postgres
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false          # usually: postgres
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+
+      # AI / voice
+      - key: DEEPSEEK_API_KEY
+        sync: false          # platform.deepseek.com
+      - key: SARVAM_API_KEY
+        sync: false          # dashboard.sarvam.ai
+
+      # JWT
+      - key: JWT_SECRET
+        generateValue: true  # Render auto-generates a secure random string
+      - key: JWT_EXPIRATION_MS
+        value: '3600000'     # 1 hour
+      - key: JWT_REFRESH_EXPIRATION_MS
+        value: '7776000000'  # 90 days
+
+      # Admin
+      - key: ADMIN_SECRET_KEY
+        sync: false          # generate locally: openssl rand -hex 32

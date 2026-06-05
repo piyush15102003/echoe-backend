@@ -17,4 +17,11 @@ public interface SessionRepository extends JpaRepository<SessionEntity, UUID> {
     Optional<SessionEntity> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
 
     List<SessionEntity> findByVaultExpiresAtBeforeAndDeletedAtIsNull(Instant now);
+
+    // Metrics
+    long countByStartedAtAfter(Instant instant);
+    long countByCrisisFlaggedTrue();
+
+    // Per-user crisis count (for emergency contact threshold)
+    long countByUserIdAndCrisisFlaggedTrue(UUID userId);
 }

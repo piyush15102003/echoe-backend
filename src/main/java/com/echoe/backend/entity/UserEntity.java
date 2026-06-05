@@ -48,6 +48,20 @@ public class UserEntity {
     @Column(name = "week_reset_at")
     private Instant weekResetAt;
 
+    @Column(name = "emergency_contact_name", length = 100)
+    private String emergencyContactName;
+
+    @Column(name = "emergency_contact_phone", length = 20)
+    private String emergencyContactPhone;
+
+    // Counts every individual crisis detection (not per session).
+    // Used for emergency contact threshold (≥ 3 → show contact).
+    // columnDefinition sets DB-level default so existing rows get 0, not NULL.
+    @Column(name = "crisis_detection_count",
+            nullable = false,
+            columnDefinition = "integer default 0")
+    private int crisisDetectionCount = 0;
+
     protected UserEntity() {}
 
     public UserEntity(UUID deviceId, String preferredLanguage, String voicePreference) {
@@ -101,4 +115,13 @@ public class UserEntity {
 
     public Instant getWeekResetAt() { return weekResetAt; }
     public void setWeekResetAt(Instant weekResetAt) { this.weekResetAt = weekResetAt; }
+
+    public String getEmergencyContactName() { return emergencyContactName; }
+    public void setEmergencyContactName(String name) { this.emergencyContactName = name; }
+
+    public String getEmergencyContactPhone() { return emergencyContactPhone; }
+    public void setEmergencyContactPhone(String phone) { this.emergencyContactPhone = phone; }
+
+    public int getCrisisDetectionCount() { return crisisDetectionCount; }
+    public void incrementCrisisDetectionCount() { this.crisisDetectionCount++; }
 }

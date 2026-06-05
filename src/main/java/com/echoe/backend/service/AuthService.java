@@ -1,6 +1,7 @@
 package com.echoe.backend.service;
 
 import com.echoe.backend.dto.auth.*;
+import com.echoe.backend.dto.safety.EmergencyContact;
 import com.echoe.backend.entity.RefreshTokenEntity;
 import com.echoe.backend.entity.UserEntity;
 import com.echoe.backend.exception.AuthException;
@@ -175,6 +176,42 @@ public class AuthService {
         userRepository.delete(user);
 
         log.info("Account wiped for user {}", userId);
+        return new SuccessResponse(true);
+    }
+
+    @Transactional
+    public EmergencyContact saveEmergencyContact(UUID userId, EmergencyContactRequest request) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("User not found"));
+        user.setEmergencyContactName(request.name());
+        user.setEmergencyContactPhone(request.phone());
+        userRepository.save(user);
+        return new EmergencyContact(request.name(), request.phone());
+    }
+
+    @Transactional
+    public void deleteEmergencyContact(UUID userId) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("User not found"));
+        user.setEmergencyContactName(null);
+        user.setEmergencyContactPhone(null);
+        userRepository.save(user);
+    }
+
+    /**
+     * Force-wipe without PIN verification.
+     * Used when the user forgot their PIN and has no biometric recovery option.
+     * JWT authentication still required — proves the caller owns the device.
+     */
+    @Transactional
+    public SuccessResponse forceWipeAccount(UUID userId) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException("User not found"));
+
+        refreshTokenRepository.revokeAllByUserId(userId);
+        userRepository.delete(user);
+
+        log.info("Account force-wiped (no PIN) for user {}", userId);
         return new SuccessResponse(true);
     }
 

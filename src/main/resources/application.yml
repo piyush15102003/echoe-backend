@@ -64,3 +64,6 @@ echoe:
     secret: ${JWT_SECRET}
     access-expiration-ms: ${JWT_EXPIRATION_MS:2592000000}      # 30 days (dev-friendly)
     refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:31536000000}  # 365 days
+
+admin:
+  secret-key: ${ADMIN_SECRET_KEY}

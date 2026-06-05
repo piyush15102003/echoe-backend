@@ -6,6 +6,7 @@ import com.echoe.backend.dto.chat.ChatMessage;
 import com.echoe.backend.dto.message.SendTextRequest;
 import com.echoe.backend.dto.message.SendTextResponse;
 import com.echoe.backend.dto.safety.CrisisResource;
+import com.echoe.backend.dto.safety.EmergencyContact;
 import com.echoe.backend.dto.safety.SafetyResult;
 import com.echoe.backend.dto.voice.SendVoiceResponse;
 import com.echoe.backend.dto.voice.ToneConfig;
@@ -96,6 +97,7 @@ public class MessageService {
 
         // 6. Crisis detection (defense in depth)
         boolean crisisDetected = safetyResult.crisis() || echoResponse.crisisFlag();
+        EmergencyContact emergencyContact = null;
 
         if (crisisDetected) {
             SessionEntity session = sessionRepository.findById(sessionId).orElse(null);
@@ -103,6 +105,7 @@ public class MessageService {
                 session.setCrisisFlagged(true);
                 sessionRepository.save(session);
             }
+            emergencyContact = resolveEmergencyContact(userId);
         }
 
         List<CrisisResource> resources = crisisDetected
@@ -114,7 +117,8 @@ public class MessageService {
                 echoResponse,
                 crisisDetected,
                 resources,
-                !echoResponse.sessionShouldEnd()
+                !echoResponse.sessionShouldEnd(),
+                emergencyContact
         );
     }
 
@@ -163,6 +167,7 @@ public class MessageService {
 
         // 8. Crisis detection (defense in depth)
         boolean crisisDetected = safetyResult.crisis() || echoResponse.crisisFlag();
+        EmergencyContact emergencyContact = null;
 
         if (crisisDetected) {
             SessionEntity session = sessionRepository.findById(sessionId).orElse(null);
@@ -170,6 +175,7 @@ public class MessageService {
                 session.setCrisisFlagged(true);
                 sessionRepository.save(session);
             }
+            emergencyContact = resolveEmergencyContact(userId);
         }
 
         List<CrisisResource> resources = crisisDetected
@@ -183,7 +189,8 @@ public class MessageService {
                 audioBase64,
                 crisisDetected,
                 resources,
-                !echoResponse.sessionShouldEnd()
+                !echoResponse.sessionShouldEnd(),
+                emergencyContact
         );
     }
 
@@ -228,6 +235,31 @@ public class MessageService {
         } catch (Exception e) {
             return content; // fallback to plain text if serialization fails
         }
+    }
+
+    /**
+     * Increments the user's total crisis detection counter and returns their emergency
+     * contact once the threshold (3 individual detections) is reached.
+     *
+     * Counter increments every time crisis is detected — even in the same session —
+     * so "3 crisis messages" triggers the contact on the 3rd message, not the 3rd session.
+     */
+    @Transactional
+    private EmergencyContact resolveEmergencyContact(UUID userId) {
+        UserEntity user = userRepository.findById(userId).orElse(null);
+        if (user == null) return null;
+
+        user.incrementCrisisDetectionCount();
+        userRepository.save(user);
+
+        if (user.getCrisisDetectionCount() < 3) return null;
+        if (user.getEmergencyContactPhone() == null
+                || user.getEmergencyContactPhone().isBlank()) return null;
+
+        return new EmergencyContact(
+                user.getEmergencyContactName(),
+                user.getEmergencyContactPhone()
+        );
     }
 
     private void enforceMessageLimit(UUID sessionId) {

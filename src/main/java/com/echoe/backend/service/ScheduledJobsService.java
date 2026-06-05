@@ -58,6 +58,16 @@ public class ScheduledJobsService {
     }
 
     /**
+     * Every 6 days — lightweight DB query to prevent Supabase free tier auto-pause.
+     * Supabase pauses after 7 days of inactivity; this keeps it alive.
+     */
+    @Scheduled(cron = "0 0 3 */6 * *")   // 3am UTC every 6 days
+    public void keepSupabaseAlive() {
+        long count = userRepository.count();
+        log.info("Supabase keep-alive ping — total users: {}", count);
+    }
+
+    /**
      * Sunday midnight IST — reset weekly session counters for free-tier users.
      */
     @Scheduled(cron = "0 0 0 * * SUN", zone = "Asia/Kolkata")

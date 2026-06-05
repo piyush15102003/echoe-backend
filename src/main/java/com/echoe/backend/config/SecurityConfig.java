@@ -33,6 +33,8 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/health").permitAll()
+                        .requestMatchers("/admin/**").permitAll()   // guarded by X-Admin-Key, not JWT
                         .requestMatchers("/test/**").permitAll()
                         .requestMatchers("/api/v1/auth/anonymous").permitAll()
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
