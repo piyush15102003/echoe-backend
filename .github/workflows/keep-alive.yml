@@ -1,0 +1,21 @@
+name: Keep Render alive
+
+on:
+  schedule:
+    # Every 14 minutes — Render free tier spins down at 15 min inactivity
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allow manual trigger from GitHub Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.RENDER_URL }}/health")
+          echo "Health check status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Warning: backend returned $STATUS"
+            exit 1
+          fi
+          echo "Backend is alive"
