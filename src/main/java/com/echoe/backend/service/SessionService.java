@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
@@ -57,22 +59,21 @@ public class SessionService {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new SessionException("User not found"));
 
-        // Reset weekly counter if week has elapsed
-        if (user.getWeekResetAt() != null
-                && Instant.now().isAfter(user.getWeekResetAt().plus(7, ChronoUnit.DAYS))) {
-            user.setSessionsThisWeek(0);
-            user.setWeekResetAt(Instant.now());
-        }
-
-        // Enforce free tier session limit
-        if (!"premium".equals(user.getSubscriptionTier())
-                && user.getSessionsThisWeek() >= rateLimitProperties.freeSessionsPerWeek()) {
-            throw new RateLimitException("Free tier limit reached: "
-                    + rateLimitProperties.freeSessionsPerWeek() + " sessions per week");
+        // Enforce free tier daily session limit (2/day, resets at midnight IST)
+        if (!"premium".equals(user.getSubscriptionTier())) {
+            Instant startOfTodayIST = LocalDate.now(ZoneId.of("Asia/Kolkata"))
+                    .atStartOfDay(ZoneId.of("Asia/Kolkata"))
+                    .toInstant();
+            long sessionsToday = sessionRepository
+                    .countByUserIdAndStartedAtAfter(userId, startOfTodayIST);
+            if (sessionsToday >= rateLimitProperties.freeSessionsPerDay()) {
+                throw new RateLimitException("Daily limit reached: "
+                        + rateLimitProperties.freeSessionsPerDay()
+                        + " sessions per day. Come back tomorrow.");
+            }
         }
 
         user.setLastActiveAt(Instant.now());
-        user.setSessionsThisWeek(user.getSessionsThisWeek() + 1);
         userRepository.save(user);
 
         SessionEntity session = new SessionEntity(userId, request.inputMode(), request.language());

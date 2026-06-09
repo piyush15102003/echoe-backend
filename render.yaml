@@ -35,5 +35,7 @@ services:
         value: '7776000000'  # 90 days
 
       # Admin
+      - key: ECHOE_RATE_LIMIT_FREE_SESSIONS_PER_DAY
+        value: '2'
       - key: ADMIN_SECRET_KEY
         sync: false          # generate locally: openssl rand -hex 32

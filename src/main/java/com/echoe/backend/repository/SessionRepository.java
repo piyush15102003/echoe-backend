@@ -24,4 +24,7 @@ public interface SessionRepository extends JpaRepository<SessionEntity, UUID> {
 
     // Per-user crisis count (for emergency contact threshold)
     long countByUserIdAndCrisisFlaggedTrue(UUID userId);
+
+    // Per-user daily session count (for 2/day free tier limit)
+    long countByUserIdAndStartedAtAfter(UUID userId, Instant since);
 }

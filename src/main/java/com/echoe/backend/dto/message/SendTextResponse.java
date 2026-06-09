@@ -16,5 +16,7 @@ public record SendTextResponse(
         @JsonProperty("crisis_resources") List<CrisisResource> crisisResources,
         @JsonProperty("session_continues") boolean sessionContinues,
         @JsonInclude(JsonInclude.Include.NON_NULL)
-        @JsonProperty("emergency_contact") EmergencyContact emergencyContact
+        @JsonProperty("emergency_contact") EmergencyContact emergencyContact,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @JsonProperty("audio_base64") String audioBase64
 ) {}

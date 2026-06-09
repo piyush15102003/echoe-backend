@@ -56,7 +56,7 @@ echoe:
 
   rate-limit:
     requests-per-minute: 60
-    free-sessions-per-week: 5
+    free-sessions-per-day: 2
     messages-per-session: 50
     auth-requests-per-minute: 10
 

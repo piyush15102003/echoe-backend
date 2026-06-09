@@ -17,6 +17,8 @@ import com.echoe.backend.exception.RateLimitException;
 import com.echoe.backend.repository.MessageRepository;
 import com.echoe.backend.repository.SessionRepository;
 import com.echoe.backend.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +32,8 @@ import java.util.UUID;
 
 @Service
 public class MessageService {
+
+    private static final Logger log = LoggerFactory.getLogger(MessageService.class);
 
     private final MessageRepository messageRepository;
     private final SessionRepository sessionRepository;
@@ -112,13 +116,31 @@ public class MessageService {
                 ? crisisResourceProvider.getResources()
                 : List.of();
 
+        // 7. Synthesize TTS for the echo response (same as voice mode)
+        String audioBase64 = null;
+        try {
+            String voicePreference = userRepository.findById(userId)
+                    .map(UserEntity::getVoicePreference)
+                    .orElse("female");
+            String language = sessionRepository.findById(sessionId)
+                    .map(s -> s.getLanguage() != null ? s.getLanguage() : "en")
+                    .orElse("en");
+            ToneConfig toneConfig = toneEngine.resolve(echoResponse.suggestedTone(), voicePreference);
+            byte[] ttsAudio = voiceService.synthesize(echoContent, toneConfig, language);
+            audioBase64 = Base64.getEncoder().encodeToString(ttsAudio);
+        } catch (Exception e) {
+            // TTS failure is non-fatal — text response still delivered
+            log.warn("TTS synthesis failed for text message, returning text only: {}", e.getMessage());
+        }
+
         return new SendTextResponse(
                 echoMessage.getId(),
                 echoResponse,
                 crisisDetected,
                 resources,
                 !echoResponse.sessionShouldEnd(),
-                emergencyContact
+                emergencyContact,
+                audioBase64
         );
     }
 
